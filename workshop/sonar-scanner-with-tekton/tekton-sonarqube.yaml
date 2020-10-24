@@ -1,0 +1,90 @@
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: github-secret
+type: kubernetes.io/basic-auth
+data:
+  username: abc123base64encoded
+  password: def456base64encoded
+---
+apiVersion: tekton.dev/v1alpha1
+kind: PipelineResource
+metadata:
+  name: git-repo
+spec:
+  type: git
+  params:
+    - name: url
+      value: https://github.com/remkohdev/NodeGoat.git
+    - name: master
+      value: master
+  secrets:
+    - fieldName: authToken
+      secretName: github-secret
+      secretKey: token
+---
+apiVersion: tekton.dev/v1alpha1
+kind: Task
+metadata:
+  name: nodegoat-task
+spec:
+  inputs:
+    resources:
+      - name: git-repo
+        type: git
+  steps:
+    - name: echo
+      image: ubuntu
+      command:
+        - /bin/bash
+      args:
+        - -c 
+        - ls -al $(inputs.resources.git-repo.path)
+---
+apiVersion: tekton.dev/v1beta1
+kind: TaskRun
+metadata:
+  generateName: nodegoat-taskrun-
+spec:
+  taskRef:
+    name: nodegoat-task
+  workspaces:
+    - name: nodegoat-workspace
+      emptyDir: {}
+---
+apiVersion: tekton.dev/v1alpha1
+kind: Pipeline
+metadata:
+  name: nodegoat-pipeline
+spec:
+  resources:
+    - name: git-repo
+      type: git
+  tasks:
+  - name: pipeline-nodegoat-task
+    taskRef:
+      name: nodegoat-task
+    resources:
+      inputs:
+        - name: git-repo
+          resource: git-repo
+---
+apiVersion: tekton.dev/v1alpha1
+kind: PipelineRun
+metadata:
+  generateName: nodegoat-pipelinerun-
+spec:
+  pipelineRef:
+    name: nodegoat-pipeline
+  workspaces:
+  - name: shared-data
+  params:
+  - name: repo-url
+    value: https://github.com/remkohdev/NodeGoat.git
+  - name: branch-name
+    value: master
+  resources:
+    - name: git-repo
+      resourceRef:
+        name: git-repo
